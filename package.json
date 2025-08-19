@@ -1,0 +1,21 @@
+{
+  "name":"Yeh-YTdownloader",
+  "version": "1.0.0",
+  "description": "A tool to download YouTube videos and convert them to mp3 or mp4 format.",
+  "main": "src/main.ts",
+  "scripts": {
+    "start": "ts-node src/main.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@distube/ytdl-core": "^4.16.12",
+    "ffmpeg-static": "^4.4.1",
+    "fluent-ffmpeg": "^2.1.3"
+  },
+  "devDependencies": {
+    "@types/fluent-ffmpeg": "^2.1.27",
+    "ts-node": "^10.4.0",
+    "typescript": "^4.5.4"
+  },
+  "license": "MIT"
+}
