@@ -11,7 +11,7 @@ if (!ffmpegPath) {
 ffmpeg.setFfmpegPath(ffmpegPath);
 
 export default class Converter {
-    private getOutputPath(fileName: string) {
+    private getOutputPath(fileName: string): string {
         const outputDir = path.resolve(process.cwd(), 'downloads');
         if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir);
         return path.join(outputDir, fileName);
@@ -84,10 +84,10 @@ export default class Converter {
                         .save(filePath);
                 });
 
-                audioFile.on('error', (err) => reject(err));
+                audioFile.on('error', (err: unknown) => reject(err));
             });
 
-            videoFile.on('error', (err) => reject(err));
+            videoFile.on('error', (err: unknown) => reject(err));
         });
     }
 }
