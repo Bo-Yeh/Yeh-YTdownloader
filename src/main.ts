@@ -1,7 +1,6 @@
 import * as readline from 'readline';
 import Converter from './utils/converter';
 import { VideoInfo } from './types';
-import ytdl from '@distube/ytdl-core';
 import { fetchMbPlayerPlaylist, isMbPlayerPlaylistUrl } from './utils/mbplayer';
 
 const rl = readline.createInterface({
@@ -29,6 +28,23 @@ async function handleConversion(videoInfo: VideoInfo): Promise<void> {
         console.error(`處理 "${videoInfo.title}" 時發生錯誤:`, error instanceof Error ? error.message : error);
         // 繼續處理，不中斷整個程式
     }
+}
+
+// 從 YouTube URL 提取影片 ID
+function extractVideoId(url: string): string | null {
+    const patterns = [
+        /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/,
+        /youtube\.com\/embed\/([^&\n?#]+)/,
+        /youtube\.com\/v\/([^&\n?#]+)/
+    ];
+    
+    for (const pattern of patterns) {
+        const match = url.match(pattern);
+        if (match && match[1]) {
+            return match[1];
+        }
+    }
+    return null;
 }
 
 async function run(): Promise<void> {
@@ -68,9 +84,15 @@ async function run(): Promise<void> {
 
             console.log(`\n已完成所有歌單歌曲的轉檔。成功: ${successCount}, 失敗: ${failCount}`);
         } else {
-            const info = await ytdl.getInfo(input);
+            // 處理單一 YouTube 影片
+            const videoId = extractVideoId(input);
+            if (!videoId) {
+                console.error('無效的 YouTube 連結');
+                return;
+            }
+
             const videoInfo: VideoInfo = {
-                title: info.videoDetails.title,
+                title: videoId, // yt-dlp 會自動取得正確的標題
                 url: input,
                 format
             };

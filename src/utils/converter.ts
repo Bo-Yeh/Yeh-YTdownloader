@@ -1,9 +1,9 @@
 import { VideoInfo } from '../types';
 import * as fs from 'fs';
 import * as path from 'path';
-import ytdl from '@distube/ytdl-core';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from 'ffmpeg-static';
+import YTDlpWrap from 'yt-dlp-wrap';
 
 if (!ffmpegPath) {
     throw new Error("找不到 ffmpeg，請確認已安裝 ffmpeg 或安裝 ffmpeg-static。");
@@ -11,31 +11,57 @@ if (!ffmpegPath) {
 ffmpeg.setFfmpegPath(ffmpegPath);
 
 export default class Converter {
-    private getOutputPath(fileName: string): string {
+    private ytDlp: YTDlpWrap;
+
+    constructor() {
+        // yt-dlp 會自動下載到專案目錄
+        this.ytDlp = new YTDlpWrap();
+    }
+
+    private getOutputPath(fileName: string) {
         const outputDir = path.resolve(process.cwd(), 'downloads');
         if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir);
         return path.join(outputDir, fileName);
     }
 
+    private async retryOperation<T>(
+        operation: () => Promise<T>,
+        maxRetries: number = 3,
+        delay: number = 2000
+    ): Promise<T> {
+        for (let i = 0; i < maxRetries; i++) {
+            try {
+                return await operation();
+            } catch (error) {
+                if (i === maxRetries - 1) throw error;
+                console.log(`重試 ${i + 1}/${maxRetries}...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+        throw new Error('超過最大重試次數');
+    }
+
     async convertToMp3(videoInfo: VideoInfo): Promise<void> {
-        const safeTitle = videoInfo.title.replace(/[<>:"/\\|?*]+/g, ''); // 過濾非法字元
+        const safeTitle = videoInfo.title.replace(/[<>:"/\\|?*]+/g, '');
         const fileName = `${safeTitle || 'output'}.mp3`;
         const filePath = this.getOutputPath(fileName);
 
-        return new Promise((resolve, reject) => {
-            const stream = ytdl(videoInfo.url, { quality: 'highestaudio' });
-            ffmpeg(stream)
-                .audioBitrate(128)
-                .toFormat('mp3')
-                .on('end', () => {
-                    console.log(`已建立檔案: ${fileName}`);
-                    resolve();
-                })
-                .on('error', (err: unknown) => {
-                    console.error('轉檔失敗:', err);
-                    reject(err);
-                })
-                .save(filePath);
+        return this.retryOperation(async () => {
+            console.log(`正在下載: ${fileName}`);
+            
+            await this.ytDlp.execPromise([
+                videoInfo.url,
+                '-x',                           // 只下載音訊
+                '--audio-format', 'mp3',        // 轉換為 mp3
+                '--audio-quality', '0',         // 最高音質
+                '-o', filePath,                 // 輸出路徑
+                '--no-playlist',                // 不下載播放清單
+                '--quiet',                      // 安靜模式
+                '--no-warnings',                // 不顯示警告
+                '--add-metadata',               // 添加元數據
+            ]);
+
+            console.log(`已建立檔案: ${fileName}`);
         });
     }
 
@@ -44,50 +70,21 @@ export default class Converter {
         const fileName = `${safeTitle || 'output'}.mp4`;
         const filePath = this.getOutputPath(fileName);
 
-        const videoTemp = this.getOutputPath(`${safeTitle}_video.mp4`);
-        const audioTemp = this.getOutputPath(`${safeTitle}_audio.mp4`);
+        return this.retryOperation(async () => {
+            console.log(`正在下載: ${fileName}`);
+            
+            await this.ytDlp.execPromise([
+                videoInfo.url,
+                '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best', // 最佳畫質
+                '-o', filePath,
+                '--merge-output-format', 'mp4', // 合併為 mp4
+                '--no-playlist',
+                '--quiet',
+                '--no-warnings',
+                '--add-metadata',
+            ]);
 
-        return new Promise((resolve, reject) => {
-            console.log('正在下載影片串流...');
-            const videoStream = ytdl(videoInfo.url, { quality: 'highestvideo' });
-            const videoFile = fs.createWriteStream(videoTemp);
-            videoStream.pipe(videoFile);
-
-            videoFile.on('finish', () => {
-                console.log('影片下載完成，正在下載音訊串流...');
-                const audioStream = ytdl(videoInfo.url, { quality: 'highestaudio' });
-                const audioFile = fs.createWriteStream(audioTemp);
-                audioStream.pipe(audioFile);
-
-                audioFile.on('finish', () => {
-                    console.log('音訊下載完成，正在合併檔案...');
-                    ffmpeg()
-                        .input(videoTemp)
-                        .input(audioTemp)
-                        .videoCodec('libx264')
-                        .audioCodec('aac')
-                        .toFormat('mp4')
-                        .on('end', () => {
-                            console.log(`已建立檔案: ${fileName}`);
-                            // 清理暫存檔
-                            fs.unlinkSync(videoTemp);
-                            fs.unlinkSync(audioTemp);
-                            resolve();
-                        })
-                        .on('error', (err: unknown) => {
-                            console.error('轉檔失敗:', err);
-                            // 出錯也嘗試清理暫存檔
-                            if (fs.existsSync(videoTemp)) fs.unlinkSync(videoTemp);
-                            if (fs.existsSync(audioTemp)) fs.unlinkSync(audioTemp);
-                            reject(err);
-                        })
-                        .save(filePath);
-                });
-
-                audioFile.on('error', (err: unknown) => reject(err));
-            });
-
-            videoFile.on('error', (err: unknown) => reject(err));
+            console.log(`已建立檔案: ${fileName}`);
         });
     }
 }
