@@ -6,7 +6,11 @@
     "rootDir": "./src",
     "esModuleInterop": true,
     "resolveJsonModule": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "lib": [
+      "ES2020",
+      "DOM"
+    ]
   },
   "include": [
     "src/**/*"
